@@ -24,7 +24,7 @@ func main() {
 	_ = godotenv.Load()
 	baseURL := os.Getenv("AGNO_URL")
 	if baseURL == "" {
-		baseURL = "http/localhost:8000"
+		baseURL = "http//localhost:8000"
 	}
 
 	if len(os.Args) < 2 {
