@@ -12,17 +12,20 @@ load_dotenv()
 from agno.models.openai import OpenAIChat
 from agno.models.anthropic import Claude
 from agno.models.google import Gemini
-# from agno.models.ollama import Ollama   # local, e.g. qwen2.5-vl for screenshots
+from agno.models.deepseek import DeepSeek
+from agno.models.ollama import Ollama   # local, e.g. qwen2.5-vl for screenshots
 
-MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "google").lower()
+MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "").lower()
 
 def build_model():
     if MODEL_PROVIDER == "openai":
         return OpenAIChat(id=os.getenv("MODEL_ID", "gpt-4o"))
     elif MODEL_PROVIDER == "anthropic":
         return Claude(id=os.getenv("MODEL_ID", ""))
+    elif MODEL_PROVIDER == "google":
+        return Gemini(id=os.getenv("MODEL_ID", "gemini-2.0-flash"))
     else:
-        return Gemini(id=os.getenv("MODEL_ID", ""))
+        return Ollama(id=os.getenv("OLLAMA_MODEL", "gemma4:e4b"))
 
 
 steel_mcp = StdioServerParameters(
@@ -43,6 +46,11 @@ agent = Agent(
     # tools=[MCPTools(servers=[steel_mcp])],
     tools=[MCPTools(server_params=[steel_mcp])],
     instructions=[
+        "You have NO knowledge of any webpage's current content until you retrieve it "
+        "yourself via a tool call. Never describe visiting, opening, or reading a page "
+        "unless you have just made a real tool call and received its result.",
+        "If you're asked to browse or check something, your first action must be an "
+        "actual tool call — not a description of what you're about to do.",
         "You are a web-browsing agent driving a real browser via Steel.",
         "Use the Steel MCP tools to navigate, click, type, and take screenshots.",
         "When you need to understand a page, take a screenshot and read it.",
