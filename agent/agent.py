@@ -30,7 +30,7 @@ def build_model():
 
 steel_mcp = StdioServerParameters(
     command="npx",
-    args=["-y", "@steel-dev/steel-mcp-server"],
+    args=[os.getenv("STEEL_MCP_SERVER_PATH", "../steel-mcp-server/dist/stdio.js")],
     env={
         "STEEL_LOCAL": "true",
         "STEEL_BASE_URL": os.getenv("STEEL_BASE_URL", "http://localhost:3000"),
@@ -44,7 +44,7 @@ agent = Agent(
     name="Steel Surfer",
     model=build_model(),          # use a vision-capable model for screenshots
     # tools=[MCPTools(servers=[steel_mcp])],
-    tools=[MCPTools(server_params=steel_mcp)],
+    tools=[MCPTools(server_params=steel_mcp)], 
     instructions=[
         "You have NO knowledge of any webpage's current content until you retrieve it "
         "yourself via a tool call. Never describe visiting, opening, or reading a page "
