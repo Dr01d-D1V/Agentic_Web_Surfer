@@ -44,7 +44,7 @@ agent = Agent(
     name="Steel Surfer",
     model=build_model(),          # use a vision-capable model for screenshots
     # tools=[MCPTools(servers=[steel_mcp])],
-    tools=[MCPTools(server_params=steel_mcp)], 
+    tools=[MCPTools(server_params=steel_mcp, timeout_seconds=60)], 
     instructions=[
         "You have NO knowledge of any webpage's current content until you retrieve it "
         "yourself via a tool call. Never describe visiting, opening, or reading a page "

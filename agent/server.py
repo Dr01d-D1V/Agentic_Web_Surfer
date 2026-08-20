@@ -55,6 +55,7 @@ async def run(req: RunRequest):
     warning = None
     tool_calls = resp.tools or []
     steel_calls = [t for t in tool_calls if t.tool_name]
+    failed_calls = [t for t in steel_calls if t.tool_call_error]
 
     if not steel_calls:
         # Small/local models sometimes narrate browsing actions ("I've opened
@@ -67,6 +68,20 @@ async def run(req: RunRequest):
             "may be hallucinated rather than based on an actual page visit."
         )
         logger.warning("run had zero tool calls session_id=%s", req.session_id)
+    elif len(failed_calls) == len(steel_calls):
+        # Tools WERE called, but every single one errored out (timeouts, bad
+        # session, etc.) — the model may have fallen back to its own training
+        # knowledge to answer anyway. That's not hallucination in the "faked a
+        # tool call" sense, but the answer still isn't grounded in a real page.
+        warning = (
+            f"All {len(steel_calls)} browser tool call(s) failed during this run "
+            "(see server logs for details). This response may be based on the "
+            "model's own knowledge rather than real page content."
+        )
+        logger.warning(
+            "run had %d/%d failed tool calls session_id=%s",
+            len(failed_calls), len(steel_calls), req.session_id,
+        )
     else:
         logger.info(
             "run used %d tool call(s): %s",
