@@ -1,15 +1,37 @@
+import re
 import logging
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from agent import agent
+from agent import agent, steel_tools
 from agno.run.base import RunStatus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agent-server")
 
-app = FastAPI()
+STEEL_SESSION_ID_RE = re.compile(r'session_id="([^"]+)"')
+STEEL_VIEWER_URL_RE = re.compile(r"live browser:\s*(\S+)")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Connect the Steel MCP subprocess ONCE, before any request arrives.
+    await steel_tools.connect()
+    logger.info("Steel MCP subprocess connected and held open for server lifetime")
+    yield
+    await steel_tools.close()
+    logger.info("Steel MCP subprocess closed on server shutdown")
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class RunRequest(BaseModel):
@@ -19,6 +41,9 @@ class RunRequest(BaseModel):
 
 class RunResponse(BaseModel):
     content: str
+    warning: str | None = None
+    steel_session_id: str | None = None
+    viewer_url: str | None = None
     warning: str | None = None
 
 
@@ -57,6 +82,24 @@ async def run(req: RunRequest):
     steel_calls = [t for t in tool_calls if t.tool_name]
     failed_calls = [t for t in steel_calls if t.tool_call_error]
 
+    # Pull the Steel session handle and viewer URL straight from the tool's own
+    # result text, not from the model's prose — the model can (and has) gotten
+    # this wrong or omitted it; the tool result is ground truth. Scan in
+    # reverse so the MOST RECENT steel_session_create wins if there were
+    # several in one run.
+    steel_session_id = None
+    viewer_url = None
+    for t in reversed(steel_calls):
+        if t.tool_name == "steel_session_create" and t.result:
+            sid_match = STEEL_SESSION_ID_RE.search(t.result)
+            url_match = STEEL_VIEWER_URL_RE.search(t.result)
+            if sid_match:
+                steel_session_id = sid_match.group(1)
+            if url_match:
+                viewer_url = url_match.group(1)
+            if steel_session_id:
+                break
+
     if not steel_calls:
         # Small/local models sometimes narrate browsing actions ("I've opened
         # Wikipedia...") without ever invoking a tool, producing a confident
@@ -89,7 +132,13 @@ async def run(req: RunRequest):
             [t.tool_name for t in steel_calls],
         )
 
-    return {"content": resp.content, "warning": warning}
+    return {
+        "content": resp.content,
+        "session_id": resp.session_id,
+        "steel_session_id": steel_session_id,
+        "viewer_url": viewer_url,
+        "warning": warning,
+        }
 
 
 if __name__ == "__main__":

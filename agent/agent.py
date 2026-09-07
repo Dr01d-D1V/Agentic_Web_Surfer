@@ -40,17 +40,19 @@ steel_mcp = StdioServerParameters(
 
 agent_db = RedisDb(db_url="redis://localhost:6379")
 
+steel_tools = MCPTools(server_params=steel_mcp, timeout_seconds=60)
+
 agent = Agent(
     name="Steel Surfer",
     model=build_model(),          # use a vision-capable model for screenshots
     # tools=[MCPTools(servers=[steel_mcp])],
-    tools=[MCPTools(server_params=steel_mcp, timeout_seconds=60)], 
+    tools=[steel_tools], 
     instructions=[
         "You have NO knowledge of any webpage's current content until you retrieve it "
         "yourself via a tool call. Never describe visiting, opening, or reading a page "
         "unless you have just made a real tool call and received its result.",
         "If you're asked to browse or check something, your first action must be an "
-        "actual tool call — not a description of what you're about to do.",
+        "actual tool call not a description of what you're about to do.",
         "You are a web-browsing agent driving a real browser via Steel.",
         "Use the Steel MCP tools to navigate, click, type, and take screenshots.",
         "When you need to understand a page, take a screenshot and read it.",
