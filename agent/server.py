@@ -1,4 +1,5 @@
 import re
+import json
 import logging
 
 from contextlib import asynccontextmanager
@@ -6,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from agent import agent, steel_tools
+from agent import agent, steel_tools, custom_steel_tools
 from agno.run.base import RunStatus
 
 logging.basicConfig(level=logging.INFO)
@@ -15,14 +16,28 @@ logger = logging.getLogger("agent-server")
 STEEL_SESSION_ID_RE = re.compile(r'session_id="([^"]+)"')
 STEEL_VIEWER_URL_RE = re.compile(r"live browser:\s*(\S+)")
 
+def _make_dialable(url: str | None) -> str | None:
+    """
+    Steel's self-hosted container reports its own bind-all address
+    (0.0.0.0), which is meaningless to a client trying to connect to it.
+    Rewrite it to localhost, which is what's actually reachable from outside
+    the container given the port mapping
+    """
+    if url is None:
+        return None
+    return re.sub(r"^(https?://)0\.0\.0\.0(:|/|$)", r"\1localhost\2", url)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Connect the Steel MCP subprocess ONCE, before any request arrives.
     await steel_tools.connect()
     logger.info("Steel MCP subprocess connected and held open for server lifetime")
+    await custom_steel_tools.connect()
+    logger.info("Custom Steel MCP subprocess connected and held open for server lifetime")
     yield
     await steel_tools.close()
-    logger.info("Steel MCP subprocess closed on server shutdown")
+    await custom_steel_tools.close()
+    logger.info("Steel MCP subprocesses closed on server shutdown")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -32,7 +47,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 class RunRequest(BaseModel):
     prompt: str
@@ -95,9 +109,26 @@ async def run(req: RunRequest):
             url_match = STEEL_VIEWER_URL_RE.search(t.result)
             if sid_match:
                 steel_session_id = sid_match.group(1)
-            if url_match:
-                viewer_url = url_match.group(1)
+            # if url_match:
+                # parsed =  json.loads(t.result)
+                # viewer_url = _make_dialable(parsed.get("debug_url"))
+                # viewer_url = _make_dialable(url_match.group(1))
+                # viewer_url = url_match.group(1)
             if steel_session_id:
+                break
+
+    # viewer_url now comes from get_live_debug_url's structured JSON result,
+    # not from regex-scanning steel_session_create's prose (which only ever
+    # printed session_viewer_url, the Steel-account-gated dashboard link, not
+    # the directly embeddable debug_url).
+    for t in reversed(steel_calls):
+        if t.tool_name == "get_live_debug_url" and t.result:
+            try:
+                parsed = json.loads(t.result)
+                viewer_url = _make_dialable(parsed.get("debug_url"))
+            except (json.JSONDecodeError, AttributeError):
+                logger.warning("could not parse get_live_debug_url result: %r", t.result)
+            if viewer_url:
                 break
 
     if not steel_calls:
