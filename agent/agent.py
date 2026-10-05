@@ -66,7 +66,7 @@ custom_steel_tools = MCPTools(
 steel_tools = MCPTools(
     server_params=steel_mcp, 
     timeout_seconds=60, 
-    # exclude_tools=["steel_session_options"] if STEEL_LOCAL else [],
+    exclude_tools=["steel_session_create", "steel_session_release"] if STEEL_LOCAL else [],
     )
 
 
@@ -97,7 +97,10 @@ agent = Agent(
         "If you encounter a login wall or captcha checkpoint and are instructed to halt for human takeover, you MUST explicitly grab the 'sessionViewerUrl' provided during session setup and print it cleanly to the user.",
         "When handing off a session for manual login, always call get_live_debug_url with the session_id first, and report that debug_url to the user, not the viewer_url printed by steel_session_create, which requires a Steel account login and will not work for them.",
         "Do not grab the URL string from the page redirect wall (e.g. do not print '://linkedin.com'). Only report the Steel-hosted dashboard viewer web address."
-        "For login walls, create a plain session and rely on the viewer_url handoff instead."
+        "For login walls, create a plain session and rely on the viewer_url handoff instead.",
+        "Whenever a user makes a request for you to go to a website, before you create the session, if the site looks like it requires the person to log in or they say you should log in, you should make use of the create_profile_session tool and when you are to end or release the session you should use the release_profile_session tool.",
+        "steel_session_create's session_id (the sess_... string) only works with steel-mcp-server's own tools: steel_navigate, steel_act, steel_session_release, and similar. For upload_file, get_live_debug_url, and release_profile_session, use the dashboard URL or UUID from that same steel_session_create result instead (the 'Watch or take control in the live browser: ...' line), not the sess_... handle.",
+        "To reuse an already-set-up profile for routine work, use plain steel_session_create with profile_id set to the real profile_id, this loads the identity safely without overwriting it. Only use create_profile_session when you specifically need to create a NEW profile or intentionally re-save changes to an existing one.",
         "Steel sessions expire based on timeout_ms set at creation and cannot be extended afterward."
         "On Steel Cloud, this account's plan caps session length at 900000ms (15 minutes). Always use timeout_ms=900000 when creating a session, do not request more.",
         # "Always set timeout_ms to at least 1800000 (30 minutes) when creating a session, especially for any task that might need a login or manual step."
